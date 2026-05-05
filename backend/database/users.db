@@ -1,0 +1,3 @@
+{"name":"Admin","email":"admin@studymart.com","password_hash":"$2a$10$3sW.Hh.CoiJLxPh1gH0tb.ho2uqr87epalc.VOUa5J.09lXUc9yVO","role":"admin","createdAt":{"$$date":1776470900450},"_id":"qsp6YKxAWOPrhmS9"}
+{"name":"Ram Singh","email":"ramsingh12340101@gmail.com","password_hash":"$2a$10$nfKM2qhx6Roj37sSvJFah.y8NxvAbBGKliDTUxe9e8QJuRu35ngsi","phone":"","role":"student","createdAt":{"$$date":1776488615461},"_id":"uPug7SvaeIFHFSXN"}
+{"name":"ram","email":"ramsingh12340101@gmail .com","password_hash":"$2a$10$7wbbbnmhfN2KCpab0uTnueOEIL3pC1gJ2zsg2kgSGCa9vpIeJ4o6K","phone":"","role":"student","createdAt":{"$$date":1777914791520},"_id":"v2lAEHMFaWXP5771"}

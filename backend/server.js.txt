@@ -1,0 +1,581 @@
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const Datastore = require('nedb-promises');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const PORT = 5000;
+const JWT_SECRET = 'studymart_secret_key_2025';
+
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const dbDir = path.join(__dirname, 'database');
+fs.mkdirSync(dbDir, { recursive: true });
+fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
+
+const db = {
+  users: Datastore.create({ filename: path.join(dbDir, 'users.db'), autoload: true }),
+  notes: Datastore.create({ filename: path.join(dbDir, 'notes.db'), autoload: true }),
+  handwritten: Datastore.create({ filename: path.join(dbDir, 'handwritten.db'), autoload: true }),
+  pyq: Datastore.create({ filename: path.join(dbDir, 'pyq.db'), autoload: true }),
+  cart: Datastore.create({ filename: path.join(dbDir, 'cart.db'), autoload: true }),
+  orders: Datastore.create({ filename: path.join(dbDir, 'orders.db'), autoload: true }),
+  purchases: Datastore.create({ filename: path.join(dbDir, 'purchases.db'), autoload: true }),
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => { cb(null, path.join(__dirname, 'uploads')); },
+  filename: (req, file, cb) => { cb(null, Date.now() + path.extname(file.originalname)); },
+});
+const upload = multer({ storage });
+
+const authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
+  catch { res.status(401).json({ error: 'Invalid token' }); }
+};
+
+const adminMiddleware = (req, res, next) => {
+  authMiddleware(req, res, () => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    next();
+  });
+};
+
+const optionalAuth = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (token) { try { req.user = jwt.verify(token, JWT_SECRET); } catch {} }
+  next();
+};
+
+// ════════════════════════════════════════════════════════════
+// ALL NOTES DATA
+// ════════════════════════════════════════════════════════════
+
+const allNotes = [
+  // ── CLASS 10 MATHEMATICS ─────────────────────────────────
+  { chapter: 1, chapter_title: 'Real Numbers', subject: 'Mathematics', class_name: 'Class 10', title: 'Real Numbers Notes', description: 'Euclid algorithm, HCF, LCM, irrational numbers', price: 29, pages: 18 },
+  { chapter: 2, chapter_title: 'Polynomials', subject: 'Mathematics', class_name: 'Class 10', title: 'Polynomials Notes', description: 'Zeroes, division algorithm, graphical representation', price: 29, pages: 14 },
+  { chapter: 3, chapter_title: 'Pair of Linear Equations', subject: 'Mathematics', class_name: 'Class 10', title: 'Linear Equations Notes', description: 'Substitution, elimination, cross multiplication', price: 29, pages: 20 },
+  { chapter: 4, chapter_title: 'Quadratic Equations', subject: 'Mathematics', class_name: 'Class 10', title: 'Quadratic Equations Notes', description: 'Factorization, completing square, quadratic formula', price: 29, pages: 16 },
+  { chapter: 5, chapter_title: 'Arithmetic Progressions', subject: 'Mathematics', class_name: 'Class 10', title: 'Arithmetic Progressions Notes', description: 'nth term, sum of AP, word problems', price: 29, pages: 14 },
+  { chapter: 6, chapter_title: 'Triangles', subject: 'Mathematics', class_name: 'Class 10', title: 'Triangles Notes', description: 'Similarity, BPT, Pythagoras theorem', price: 29, pages: 18 },
+  { chapter: 7, chapter_title: 'Coordinate Geometry', subject: 'Mathematics', class_name: 'Class 10', title: 'Coordinate Geometry Notes', description: 'Distance formula, section formula, area of triangle', price: 29, pages: 16 },
+  { chapter: 8, chapter_title: 'Introduction to Trigonometry', subject: 'Mathematics', class_name: 'Class 10', title: 'Trigonometry Notes', description: 'All ratios, identities, complementary angles', price: 35, pages: 22 },
+  { chapter: 9, chapter_title: 'Applications of Trigonometry', subject: 'Mathematics', class_name: 'Class 10', title: 'Applications of Trigonometry Notes', description: 'Heights and distances, angle of elevation', price: 29, pages: 14 },
+  { chapter: 10, chapter_title: 'Circles', subject: 'Mathematics', class_name: 'Class 10', title: 'Circles Notes', description: 'Tangents, secants, angle subtended', price: 29, pages: 16 },
+  { chapter: 11, chapter_title: 'Areas Related to Circles', subject: 'Mathematics', class_name: 'Class 10', title: 'Areas Related to Circles Notes', description: 'Sector, segment, area of combinations', price: 29, pages: 14 },
+  { chapter: 12, chapter_title: 'Surface Areas and Volumes', subject: 'Mathematics', class_name: 'Class 10', title: 'Surface Areas and Volumes Notes', description: 'Cone, sphere, cylinder, frustum combinations', price: 35, pages: 20 },
+  { chapter: 13, chapter_title: 'Statistics', subject: 'Mathematics', class_name: 'Class 10', title: 'Statistics Notes', description: 'Mean, median, mode, ogive, histogram', price: 29, pages: 18 },
+  { chapter: 14, chapter_title: 'Probability', subject: 'Mathematics', class_name: 'Class 10', title: 'Probability Notes', description: 'Classical probability, events, sample space', price: 29, pages: 12 },
+
+  // ── CLASS 10 SCIENCE ─────────────────────────────────────
+  { chapter: 1, chapter_title: 'Chemical Reactions and Equations', subject: 'Science', class_name: 'Class 10', title: 'Chemical Reactions Notes', description: 'Types of reactions, balancing equations', price: 35, pages: 16 },
+  { chapter: 2, chapter_title: 'Acids, Bases and Salts', subject: 'Science', class_name: 'Class 10', title: 'Acids Bases Salts Notes', description: 'pH scale, indicators, neutralization reactions', price: 29, pages: 18 },
+  { chapter: 3, chapter_title: 'Metals and Non-metals', subject: 'Science', class_name: 'Class 10', title: 'Metals and Non-metals Notes', description: 'Properties, reactivity series, extraction', price: 35, pages: 20 },
+  { chapter: 4, chapter_title: 'Carbon and its Compounds', subject: 'Science', class_name: 'Class 10', title: 'Carbon Compounds Notes', description: 'Covalent bonds, homologous series, functional groups', price: 35, pages: 22 },
+  { chapter: 5, chapter_title: 'Life Processes', subject: 'Science', class_name: 'Class 10', title: 'Life Processes Notes', description: 'Nutrition, respiration, transportation, excretion', price: 35, pages: 24 },
+  { chapter: 6, chapter_title: 'Control and Coordination', subject: 'Science', class_name: 'Class 10', title: 'Control and Coordination Notes', description: 'Nervous system, hormones, reflex action', price: 35, pages: 20 },
+  { chapter: 7, chapter_title: 'How do Organisms Reproduce', subject: 'Science', class_name: 'Class 10', title: 'Reproduction Notes', description: 'Asexual, sexual reproduction, human reproduction', price: 29, pages: 18 },
+  { chapter: 8, chapter_title: 'Heredity', subject: 'Science', class_name: 'Class 10', title: 'Heredity Notes', description: 'Mendels laws, DNA, evolution', price: 29, pages: 16 },
+  { chapter: 9, chapter_title: 'Light - Reflection and Refraction', subject: 'Science', class_name: 'Class 10', title: 'Light Notes', description: 'Mirror formula, lens formula, refraction laws', price: 35, pages: 22 },
+  { chapter: 10, chapter_title: 'Human Eye and Colourful World', subject: 'Science', class_name: 'Class 10', title: 'Human Eye Notes', description: 'Defects of vision, dispersion, scattering', price: 29, pages: 16 },
+  { chapter: 11, chapter_title: 'Electricity', subject: 'Science', class_name: 'Class 10', title: 'Electricity Notes', description: 'Ohms law, resistance, electric power, circuits', price: 35, pages: 24 },
+  { chapter: 12, chapter_title: 'Magnetic Effects of Electric Current', subject: 'Science', class_name: 'Class 10', title: 'Magnetic Effects Notes', description: 'Magnetic field, motor, generator, Fleming rules', price: 35, pages: 20 },
+  { chapter: 13, chapter_title: 'Our Environment', subject: 'Science', class_name: 'Class 10', title: 'Our Environment Notes', description: 'Food chain, ecosystem, ozone layer, waste management', price: 29, pages: 14 },
+
+  // ── CLASS 10 SOCIAL SCIENCE ──────────────────────────────
+  { chapter: 1, chapter_title: 'Rise of Nationalism in Europe', subject: 'Social Science', class_name: 'Class 10', title: 'Nationalism in Europe Notes', description: 'French Revolution, nation states, Bismarck', price: 29, pages: 16 },
+  { chapter: 2, chapter_title: 'Nationalism in India', subject: 'Social Science', class_name: 'Class 10', title: 'Nationalism in India Notes', description: 'Non-cooperation, Civil Disobedience, Quit India', price: 29, pages: 18 },
+  { chapter: 3, chapter_title: 'Making of a Global World', subject: 'Social Science', class_name: 'Class 10', title: 'Global World Notes', description: 'Trade, colonialism, Great Depression, post-war', price: 29, pages: 16 },
+  { chapter: 4, chapter_title: 'Age of Industrialisation', subject: 'Social Science', class_name: 'Class 10', title: 'Industrialisation Notes', description: 'Proto-industrialisation, factories, labour, markets', price: 29, pages: 14 },
+  { chapter: 5, chapter_title: 'Resources and Development', subject: 'Social Science', class_name: 'Class 10', title: 'Resources Notes', description: 'Types of resources, land use, soil types', price: 29, pages: 16 },
+  { chapter: 6, chapter_title: 'Water Resources', subject: 'Social Science', class_name: 'Class 10', title: 'Water Resources Notes', description: 'Dams, rainwater harvesting, water scarcity', price: 29, pages: 14 },
+  { chapter: 7, chapter_title: 'Agriculture', subject: 'Social Science', class_name: 'Class 10', title: 'Agriculture Notes', description: 'Types of farming, crops, food security', price: 29, pages: 16 },
+  { chapter: 8, chapter_title: 'Power Sharing', subject: 'Social Science', class_name: 'Class 10', title: 'Power Sharing Notes', description: 'Belgium, Sri Lanka, forms of power sharing', price: 29, pages: 12 },
+  { chapter: 9, chapter_title: 'Federalism', subject: 'Social Science', class_name: 'Class 10', title: 'Federalism Notes', description: 'Federal features, decentralisation, India', price: 29, pages: 14 },
+  { chapter: 10, chapter_title: 'Development', subject: 'Social Science', class_name: 'Class 10', title: 'Development Notes', description: 'Goals, national development, HDI, sustainability', price: 29, pages: 14 },
+
+  // ── CLASS 10 ENGLISH ─────────────────────────────────────
+  { chapter: 1, chapter_title: 'A Letter to God', subject: 'English', class_name: 'Class 10', title: 'A Letter to God Notes', description: 'Summary, themes, character analysis', price: 19, pages: 10 },
+  { chapter: 2, chapter_title: 'Nelson Mandela', subject: 'English', class_name: 'Class 10', title: 'Nelson Mandela Notes', description: 'Summary, themes, important questions', price: 19, pages: 10 },
+  { chapter: 3, chapter_title: 'Two Stories About Flying', subject: 'English', class_name: 'Class 10', title: 'Two Stories About Flying Notes', description: 'His First Flight, Black Aeroplane summary', price: 19, pages: 10 },
+  { chapter: 4, chapter_title: 'From the Diary of Anne Frank', subject: 'English', class_name: 'Class 10', title: 'Anne Frank Notes', description: 'Summary, character, themes, questions', price: 19, pages: 10 },
+  { chapter: 5, chapter_title: 'Glimpses of India', subject: 'English', class_name: 'Class 10', title: 'Glimpses of India Notes', description: 'A Baker, Coorg, Tea from Assam summaries', price: 19, pages: 12 },
+
+  // ── CLASS 10 HINDI ───────────────────────────────────────
+  { chapter: 1, chapter_title: 'Surdas ke Pad', subject: 'Hindi', class_name: 'Class 10', title: 'Surdas Notes', description: 'Pad, meaning, literary devices, questions', price: 19, pages: 10 },
+  { chapter: 2, chapter_title: 'Tulsidas - Ram Lakshman Parshuram', subject: 'Hindi', class_name: 'Class 10', title: 'Tulsidas Notes', description: 'Dohe, meaning, literary devices', price: 19, pages: 10 },
+  { chapter: 3, chapter_title: 'Dev ke Savaiye', subject: 'Hindi', class_name: 'Class 10', title: 'Dev Notes', description: 'Savaiye, meaning, important questions', price: 19, pages: 8 },
+  { chapter: 4, chapter_title: 'Jaishankar Prasad - Aatmakatha', subject: 'Hindi', class_name: 'Class 10', title: 'Jaishankar Prasad Notes', description: 'Poem meaning, themes, questions', price: 19, pages: 10 },
+
+  // ── CLASS 12 PHYSICS ─────────────────────────────────────
+  { chapter: 1, chapter_title: 'Electric Charges and Fields', subject: 'Physics', class_name: 'Class 12', title: 'Electric Charges Notes', description: 'Coulombs law, electric field lines, Gauss law', price: 49, pages: 28 },
+  { chapter: 2, chapter_title: 'Electrostatic Potential and Capacitance', subject: 'Physics', class_name: 'Class 12', title: 'Electrostatic Potential Notes', description: 'Potential, capacitors, energy stored', price: 49, pages: 26 },
+  { chapter: 3, chapter_title: 'Current Electricity', subject: 'Physics', class_name: 'Class 12', title: 'Current Electricity Notes', description: 'Ohms law, Kirchhoff laws, Wheatstone bridge', price: 49, pages: 30 },
+  { chapter: 4, chapter_title: 'Moving Charges and Magnetism', subject: 'Physics', class_name: 'Class 12', title: 'Moving Charges Notes', description: 'Biot-Savart law, Ampere law, cyclotron', price: 49, pages: 28 },
+  { chapter: 5, chapter_title: 'Magnetism and Matter', subject: 'Physics', class_name: 'Class 12', title: 'Magnetism Notes', description: 'Bar magnet, Earth magnetism, dia para ferro', price: 45, pages: 22 },
+  { chapter: 6, chapter_title: 'Electromagnetic Induction', subject: 'Physics', class_name: 'Class 12', title: 'Electromagnetic Induction Notes', description: 'Faraday law, Lenz law, motional EMF', price: 49, pages: 26 },
+  { chapter: 7, chapter_title: 'Alternating Current', subject: 'Physics', class_name: 'Class 12', title: 'Alternating Current Notes', description: 'RMS, LCR circuit, resonance, transformer', price: 49, pages: 28 },
+  { chapter: 8, chapter_title: 'Electromagnetic Waves', subject: 'Physics', class_name: 'Class 12', title: 'Electromagnetic Waves Notes', description: 'EM spectrum, properties, uses', price: 39, pages: 16 },
+  { chapter: 9, chapter_title: 'Ray Optics and Optical Instruments', subject: 'Physics', class_name: 'Class 12', title: 'Ray Optics Notes', description: 'Reflection, refraction, lenses, microscope, telescope', price: 49, pages: 32 },
+  { chapter: 10, chapter_title: 'Wave Optics', subject: 'Physics', class_name: 'Class 12', title: 'Wave Optics Notes', description: 'Huygens principle, interference, diffraction', price: 49, pages: 26 },
+  { chapter: 11, chapter_title: 'Dual Nature of Radiation and Matter', subject: 'Physics', class_name: 'Class 12', title: 'Dual Nature Notes', description: 'Photoelectric effect, de Broglie wavelength', price: 45, pages: 22 },
+  { chapter: 12, chapter_title: 'Atoms', subject: 'Physics', class_name: 'Class 12', title: 'Atoms Notes', description: 'Rutherford, Bohr model, hydrogen spectrum', price: 45, pages: 20 },
+  { chapter: 13, chapter_title: 'Nuclei', subject: 'Physics', class_name: 'Class 12', title: 'Nuclei Notes', description: 'Nuclear force, binding energy, radioactivity, fission', price: 45, pages: 22 },
+  { chapter: 14, chapter_title: 'Semiconductor Electronics', subject: 'Physics', class_name: 'Class 12', title: 'Semiconductor Notes', description: 'p-n junction, diode, transistor, logic gates', price: 49, pages: 28 },
+
+  // ── CLASS 12 CHEMISTRY ───────────────────────────────────
+  { chapter: 1, chapter_title: 'The Solid State', subject: 'Chemistry', class_name: 'Class 12', title: 'Solid State Notes', description: 'Crystal structure, unit cell, defects, properties', price: 45, pages: 22 },
+  { chapter: 2, chapter_title: 'Solutions', subject: 'Chemistry', class_name: 'Class 12', title: 'Solutions Notes', description: 'Concentration, Raoults law, colligative properties', price: 45, pages: 24 },
+  { chapter: 3, chapter_title: 'Electrochemistry', subject: 'Chemistry', class_name: 'Class 12', title: 'Electrochemistry Notes', description: 'Electrolytic cells, Faradays laws, batteries, corrosion', price: 49, pages: 26 },
+  { chapter: 4, chapter_title: 'Chemical Kinetics', subject: 'Chemistry', class_name: 'Class 12', title: 'Chemical Kinetics Notes', description: 'Rate of reaction, order, Arrhenius equation', price: 45, pages: 22 },
+  { chapter: 5, chapter_title: 'Surface Chemistry', subject: 'Chemistry', class_name: 'Class 12', title: 'Surface Chemistry Notes', description: 'Adsorption, catalysis, colloids, emulsions', price: 39, pages: 18 },
+  { chapter: 6, chapter_title: 'General Principles of Isolation', subject: 'Chemistry', class_name: 'Class 12', title: 'Metallurgy Notes', description: 'Concentration, reduction, refining of metals', price: 39, pages: 18 },
+  { chapter: 7, chapter_title: 'The p-Block Elements', subject: 'Chemistry', class_name: 'Class 12', title: 'p-Block Elements Notes', description: 'Group 15-18, properties, compounds', price: 49, pages: 30 },
+  { chapter: 8, chapter_title: 'The d and f Block Elements', subject: 'Chemistry', class_name: 'Class 12', title: 'd-f Block Notes', description: 'Transition metals, lanthanides, actinides', price: 45, pages: 24 },
+  { chapter: 9, chapter_title: 'Coordination Compounds', subject: 'Chemistry', class_name: 'Class 12', title: 'Coordination Compounds Notes', description: 'Ligands, IUPAC naming, isomerism, bonding', price: 49, pages: 26 },
+  { chapter: 10, chapter_title: 'Haloalkanes and Haloarenes', subject: 'Chemistry', class_name: 'Class 12', title: 'Haloalkanes Notes', description: 'Preparation, properties, SN1 SN2 reactions', price: 45, pages: 24 },
+  { chapter: 11, chapter_title: 'Alcohols, Phenols and Ethers', subject: 'Chemistry', class_name: 'Class 12', title: 'Alcohols Phenols Notes', description: 'Preparation, chemical properties, uses', price: 45, pages: 24 },
+  { chapter: 12, chapter_title: 'Aldehydes, Ketones and Carboxylic Acids', subject: 'Chemistry', class_name: 'Class 12', title: 'Carbonyl Compounds Notes', description: 'Nucleophilic addition, oxidation, reduction', price: 49, pages: 28 },
+  { chapter: 13, chapter_title: 'Amines', subject: 'Chemistry', class_name: 'Class 12', title: 'Amines Notes', description: 'Classification, preparation, reactions, diazonium', price: 45, pages: 22 },
+  { chapter: 14, chapter_title: 'Biomolecules', subject: 'Chemistry', class_name: 'Class 12', title: 'Biomolecules Notes', description: 'Carbohydrates, proteins, vitamins, nucleic acids', price: 39, pages: 20 },
+  { chapter: 15, chapter_title: 'Polymers', subject: 'Chemistry', class_name: 'Class 12', title: 'Polymers Notes', description: 'Addition, condensation, natural and synthetic polymers', price: 39, pages: 18 },
+  { chapter: 16, chapter_title: 'Chemistry in Everyday Life', subject: 'Chemistry', class_name: 'Class 12', title: 'Chemistry Everyday Life Notes', description: 'Drugs, food preservatives, cleansing agents', price: 39, pages: 16 },
+
+  // ── CLASS 12 MATHEMATICS ─────────────────────────────────
+  { chapter: 1, chapter_title: 'Relations and Functions', subject: 'Mathematics', class_name: 'Class 12', title: 'Relations and Functions Notes', description: 'Types of relations, functions, composition', price: 45, pages: 20 },
+  { chapter: 2, chapter_title: 'Inverse Trigonometric Functions', subject: 'Mathematics', class_name: 'Class 12', title: 'Inverse Trig Notes', description: 'Domain, range, properties, formulae', price: 45, pages: 18 },
+  { chapter: 3, chapter_title: 'Matrices', subject: 'Mathematics', class_name: 'Class 12', title: 'Matrices Notes', description: 'Types, operations, transpose, symmetric', price: 45, pages: 20 },
+  { chapter: 4, chapter_title: 'Determinants', subject: 'Mathematics', class_name: 'Class 12', title: 'Determinants Notes', description: 'Properties, cofactors, adjoint, inverse, Cramers rule', price: 45, pages: 22 },
+  { chapter: 5, chapter_title: 'Continuity and Differentiability', subject: 'Mathematics', class_name: 'Class 12', title: 'Continuity Notes', description: 'Continuity, chain rule, implicit, logarithmic', price: 49, pages: 26 },
+  { chapter: 6, chapter_title: 'Application of Derivatives', subject: 'Mathematics', class_name: 'Class 12', title: 'Application of Derivatives Notes', description: 'Rate of change, tangents, maxima, minima', price: 49, pages: 26 },
+  { chapter: 7, chapter_title: 'Integrals', subject: 'Mathematics', class_name: 'Class 12', title: 'Integrals Notes', description: 'Indefinite, definite, integration by parts, partial fractions', price: 49, pages: 32 },
+  { chapter: 8, chapter_title: 'Application of Integrals', subject: 'Mathematics', class_name: 'Class 12', title: 'Application of Integrals Notes', description: 'Area between curves, definite integral applications', price: 45, pages: 20 },
+  { chapter: 9, chapter_title: 'Differential Equations', subject: 'Mathematics', class_name: 'Class 12', title: 'Differential Equations Notes', description: 'Order, degree, variable separable, linear DE', price: 45, pages: 22 },
+  { chapter: 10, chapter_title: 'Vector Algebra', subject: 'Mathematics', class_name: 'Class 12', title: 'Vector Algebra Notes', description: 'Dot product, cross product, scalar triple product', price: 45, pages: 22 },
+  { chapter: 11, chapter_title: 'Three Dimensional Geometry', subject: 'Mathematics', class_name: 'Class 12', title: '3D Geometry Notes', description: 'Direction cosines, lines, planes, angles', price: 45, pages: 24 },
+  { chapter: 12, chapter_title: 'Linear Programming', subject: 'Mathematics', class_name: 'Class 12', title: 'Linear Programming Notes', description: 'Feasible region, objective function, corner points', price: 39, pages: 16 },
+  { chapter: 13, chapter_title: 'Probability', subject: 'Mathematics', class_name: 'Class 12', title: 'Probability Notes', description: 'Conditional probability, Bayes theorem, distributions', price: 45, pages: 22 },
+
+  // ── CLASS 12 BIOLOGY ─────────────────────────────────────
+  { chapter: 1, chapter_title: 'Reproduction in Organisms', subject: 'Biology', class_name: 'Class 12', title: 'Reproduction Notes', description: 'Asexual and sexual reproduction, life span', price: 39, pages: 16 },
+  { chapter: 2, chapter_title: 'Sexual Reproduction in Flowering Plants', subject: 'Biology', class_name: 'Class 12', title: 'Flowering Plants Reproduction Notes', description: 'Pollination, fertilization, seed, fruit formation', price: 45, pages: 22 },
+  { chapter: 3, chapter_title: 'Human Reproduction', subject: 'Biology', class_name: 'Class 12', title: 'Human Reproduction Notes', description: 'Male female reproductive system, menstrual cycle', price: 45, pages: 22 },
+  { chapter: 4, chapter_title: 'Reproductive Health', subject: 'Biology', class_name: 'Class 12', title: 'Reproductive Health Notes', description: 'Family planning, contraception, STDs, MTP', price: 39, pages: 16 },
+  { chapter: 5, chapter_title: 'Principles of Inheritance and Variation', subject: 'Biology', class_name: 'Class 12', title: 'Inheritance Notes', description: 'Mendels laws, dominance, incomplete dominance', price: 45, pages: 24 },
+  { chapter: 6, chapter_title: 'Molecular Basis of Inheritance', subject: 'Biology', class_name: 'Class 12', title: 'Molecular Inheritance Notes', description: 'DNA structure, replication, transcription, translation', price: 49, pages: 28 },
+  { chapter: 7, chapter_title: 'Evolution', subject: 'Biology', class_name: 'Class 12', title: 'Evolution Notes', description: 'Origin of life, Darwinism, natural selection, speciation', price: 45, pages: 22 },
+  { chapter: 8, chapter_title: 'Human Health and Disease', subject: 'Biology', class_name: 'Class 12', title: 'Health and Disease Notes', description: 'Pathogens, immunity, AIDS, cancer, drugs', price: 45, pages: 22 },
+  { chapter: 9, chapter_title: 'Strategies for Enhancement in Food Production', subject: 'Biology', class_name: 'Class 12', title: 'Food Production Notes', description: 'Plant breeding, tissue culture, animal husbandry', price: 39, pages: 18 },
+  { chapter: 10, chapter_title: 'Microbes in Human Welfare', subject: 'Biology', class_name: 'Class 12', title: 'Microbes Notes', description: 'Microbes in food, industry, biogas, sewage', price: 39, pages: 16 },
+  { chapter: 11, chapter_title: 'Biotechnology Principles and Processes', subject: 'Biology', class_name: 'Class 12', title: 'Biotechnology Principles Notes', description: 'Recombinant DNA, cloning, PCR, gel electrophoresis', price: 49, pages: 26 },
+  { chapter: 12, chapter_title: 'Biotechnology and its Applications', subject: 'Biology', class_name: 'Class 12', title: 'Biotechnology Applications Notes', description: 'GM crops, insulin, gene therapy, biopiracy', price: 45, pages: 22 },
+  { chapter: 13, chapter_title: 'Organisms and Populations', subject: 'Biology', class_name: 'Class 12', title: 'Ecology Notes', description: 'Habitat, niche, population attributes, interactions', price: 39, pages: 20 },
+  { chapter: 14, chapter_title: 'Ecosystem', subject: 'Biology', class_name: 'Class 12', title: 'Ecosystem Notes', description: 'Energy flow, food chain, nutrient cycling', price: 39, pages: 18 },
+  { chapter: 15, chapter_title: 'Biodiversity and Conservation', subject: 'Biology', class_name: 'Class 12', title: 'Biodiversity Notes', description: 'Types of biodiversity, hotspots, conservation', price: 39, pages: 18 },
+  { chapter: 16, chapter_title: 'Environmental Issues', subject: 'Biology', class_name: 'Class 12', title: 'Environmental Issues Notes', description: 'Air water pollution, ozone, greenhouse effect', price: 39, pages: 16 },
+
+  // ── CLASS 12 COMPUTER SCIENCE ────────────────────────────
+  { chapter: 1, chapter_title: 'Python Revision Tour', subject: 'Computer Science', class_name: 'Class 12', title: 'Python Revision Notes', description: 'Data types, operators, strings, lists, dictionaries', price: 39, pages: 20 },
+  { chapter: 2, chapter_title: 'Functions', subject: 'Computer Science', class_name: 'Class 12', title: 'Python Functions Notes', description: 'User defined functions, recursion, scope', price: 39, pages: 18 },
+  { chapter: 3, chapter_title: 'File Handling', subject: 'Computer Science', class_name: 'Class 12', title: 'File Handling Notes', description: 'Text files, binary files, CSV files in Python', price: 39, pages: 16 },
+  { chapter: 4, chapter_title: 'Data Structures - Stack', subject: 'Computer Science', class_name: 'Class 12', title: 'Stack Notes', description: 'Stack using list, push, pop, applications', price: 35, pages: 14 },
+  { chapter: 5, chapter_title: 'Database Concepts and SQL', subject: 'Computer Science', class_name: 'Class 12', title: 'SQL Notes', description: 'DDL, DML, SELECT, joins, aggregate functions', price: 45, pages: 24 },
+  { chapter: 6, chapter_title: 'Computer Networks', subject: 'Computer Science', class_name: 'Class 12', title: 'Networks Notes', description: 'Topologies, protocols, OSI model, TCP/IP', price: 39, pages: 20 },
+  { chapter: 7, chapter_title: 'Cybersecurity', subject: 'Computer Science', class_name: 'Class 12', title: 'Cybersecurity Notes', description: 'Threats, malware, firewalls, safe practices', price: 35, pages: 14 },
+
+  // ── CLASS 12 ACCOUNTANCY ─────────────────────────────────
+  { chapter: 1, chapter_title: 'Accounting for Partnership', subject: 'Accountancy', class_name: 'Class 12', title: 'Partnership Accounts Notes', description: 'Partnership deed, capital accounts, profit sharing', price: 45, pages: 24 },
+  { chapter: 2, chapter_title: 'Change in Profit Sharing Ratio', subject: 'Accountancy', class_name: 'Class 12', title: 'Profit Sharing Ratio Notes', description: 'Revaluation, sacrifice ratio, gaining ratio', price: 39, pages: 18 },
+  { chapter: 3, chapter_title: 'Admission of a Partner', subject: 'Accountancy', class_name: 'Class 12', title: 'Admission of Partner Notes', description: 'Goodwill, revaluation, capital adjustment', price: 45, pages: 22 },
+  { chapter: 4, chapter_title: 'Retirement and Death of Partner', subject: 'Accountancy', class_name: 'Class 12', title: 'Retirement of Partner Notes', description: 'Settlement of accounts, executor account', price: 45, pages: 22 },
+  { chapter: 5, chapter_title: 'Dissolution of Partnership Firm', subject: 'Accountancy', class_name: 'Class 12', title: 'Dissolution Notes', description: 'Realisation account, settlement of liabilities', price: 39, pages: 18 },
+  { chapter: 6, chapter_title: 'Share Capital', subject: 'Accountancy', class_name: 'Class 12', title: 'Share Capital Notes', description: 'Issue of shares, forfeiture, reissue of shares', price: 45, pages: 24 },
+  { chapter: 7, chapter_title: 'Cash Flow Statement', subject: 'Accountancy', class_name: 'Class 12', title: 'Cash Flow Statement Notes', description: 'Operating, investing, financing activities', price: 45, pages: 22 },
+
+  // ── CLASS 12 BUSINESS STUDIES ────────────────────────────
+  { chapter: 1, chapter_title: 'Nature and Significance of Management', subject: 'Business Studies', class_name: 'Class 12', title: 'Management Notes', description: 'Features, importance, levels of management', price: 35, pages: 16 },
+  { chapter: 2, chapter_title: 'Principles of Management', subject: 'Business Studies', class_name: 'Class 12', title: 'Principles of Management Notes', description: 'Fayols and Taylors principles, scientific management', price: 39, pages: 18 },
+  { chapter: 3, chapter_title: 'Business Environment', subject: 'Business Studies', class_name: 'Class 12', title: 'Business Environment Notes', description: 'Dimensions, liberalisation, privatisation, globalisation', price: 35, pages: 16 },
+  { chapter: 4, chapter_title: 'Planning', subject: 'Business Studies', class_name: 'Class 12', title: 'Planning Notes', description: 'Importance, limitations, types of plans, process', price: 35, pages: 14 },
+  { chapter: 5, chapter_title: 'Organising', subject: 'Business Studies', class_name: 'Class 12', title: 'Organising Notes', description: 'Delegation, decentralisation, formal informal', price: 35, pages: 16 },
+  { chapter: 6, chapter_title: 'Marketing Management', subject: 'Business Studies', class_name: 'Class 12', title: 'Marketing Notes', description: 'Marketing mix, product, price, place, promotion', price: 39, pages: 20 },
+  { chapter: 7, chapter_title: 'Consumer Protection', subject: 'Business Studies', class_name: 'Class 12', title: 'Consumer Protection Notes', description: 'Consumer rights, COPRA, consumer forums', price: 35, pages: 14 },
+
+  // ── CLASS 12 ECONOMICS ───────────────────────────────────
+  { chapter: 1, chapter_title: 'Introduction to Microeconomics', subject: 'Economics', class_name: 'Class 12', title: 'Microeconomics Notes', description: 'Central problems, opportunity cost, PPC', price: 35, pages: 16 },
+  { chapter: 2, chapter_title: 'Theory of Consumer Behaviour', subject: 'Economics', class_name: 'Class 12', title: 'Consumer Behaviour Notes', description: 'Utility, indifference curves, budget line', price: 39, pages: 20 },
+  { chapter: 3, chapter_title: 'Production and Costs', subject: 'Economics', class_name: 'Class 12', title: 'Production and Costs Notes', description: 'Production function, returns, TC, MC, AC', price: 39, pages: 20 },
+  { chapter: 4, chapter_title: 'Theory of Firm and Market Equilibrium', subject: 'Economics', class_name: 'Class 12', title: 'Market Equilibrium Notes', description: 'Perfect competition, monopoly, demand supply', price: 39, pages: 20 },
+  { chapter: 5, chapter_title: 'National Income and Related Aggregates', subject: 'Economics', class_name: 'Class 12', title: 'National Income Notes', description: 'GDP, GNP, NDP, methods of calculation', price: 45, pages: 24 },
+  { chapter: 6, chapter_title: 'Money and Banking', subject: 'Economics', class_name: 'Class 12', title: 'Money and Banking Notes', description: 'Functions of money, credit creation, RBI, central bank', price: 39, pages: 20 },
+  { chapter: 7, chapter_title: 'Government Budget and the Economy', subject: 'Economics', class_name: 'Class 12', title: 'Government Budget Notes', description: 'Components, fiscal policy, deficit, revenue capital', price: 39, pages: 18 },
+  { chapter: 8, chapter_title: 'Balance of Payments', subject: 'Economics', class_name: 'Class 12', title: 'Balance of Payments Notes', description: 'Current account, capital account, foreign exchange', price: 39, pages: 18 },
+];
+
+// ════════════════════════════════════════════════════════════
+// HANDWRITTEN NOTES DATA
+// ════════════════════════════════════════════════════════════
+
+const allHandwritten = [
+  { chapter: 1, chapter_title: 'Real Numbers', subject: 'Mathematics', class_name: 'Class 10', title: 'Real Numbers Handwritten', description: 'Clear handwritten with solved examples', price: 19, pages: 12, author_name: 'Priya Sharma' },
+  { chapter: 4, chapter_title: 'Quadratic Equations', subject: 'Mathematics', class_name: 'Class 10', title: 'Quadratic Equations Handwritten', description: 'Step by step solutions with tricks', price: 19, pages: 14, author_name: 'Rahul Verma' },
+  { chapter: 8, chapter_title: 'Introduction to Trigonometry', subject: 'Mathematics', class_name: 'Class 10', title: 'Trigonometry Handwritten', description: 'All formulas with tricks and mnemonics', price: 19, pages: 15, author_name: 'Anjali Singh' },
+  { chapter: 12, chapter_title: 'Surface Areas and Volumes', subject: 'Mathematics', class_name: 'Class 10', title: 'Surface Areas Handwritten', description: 'All formulas with diagrams', price: 19, pages: 16, author_name: 'Priya Sharma' },
+  { chapter: 3, chapter_title: 'Metals and Non-metals', subject: 'Science', class_name: 'Class 10', title: 'Metals Non-metals Handwritten', description: 'Reactivity series, extraction diagrams', price: 19, pages: 14, author_name: 'Rahul Verma' },
+  { chapter: 5, chapter_title: 'Life Processes', subject: 'Science', class_name: 'Class 10', title: 'Life Processes Handwritten', description: 'Diagrams of all life processes', price: 19, pages: 18, author_name: 'Anjali Singh' },
+  { chapter: 9, chapter_title: 'Light Reflection and Refraction', subject: 'Science', class_name: 'Class 10', title: 'Light Handwritten Notes', description: 'Ray diagrams, mirror lens formulas', price: 19, pages: 16, author_name: 'Priya Sharma' },
+  { chapter: 11, chapter_title: 'Electricity', subject: 'Science', class_name: 'Class 10', title: 'Electricity Handwritten', description: 'Circuit diagrams, derivations', price: 19, pages: 18, author_name: 'Rahul Verma' },
+  { chapter: 1, chapter_title: 'Electric Charges and Fields', subject: 'Physics', class_name: 'Class 12', title: 'Electrostatics Handwritten', description: 'Detailed with diagrams and derivations', price: 39, pages: 20, author_name: 'Anjali Singh' },
+  { chapter: 3, chapter_title: 'Current Electricity', subject: 'Physics', class_name: 'Class 12', title: 'Current Electricity Handwritten', description: 'Circuit diagrams and all derivations', price: 39, pages: 18, author_name: 'Rahul Verma' },
+  { chapter: 7, chapter_title: 'Alternating Current', subject: 'Physics', class_name: 'Class 12', title: 'AC Circuits Handwritten', description: 'Phasor diagrams, LCR circuit derivations', price: 39, pages: 20, author_name: 'Priya Sharma' },
+  { chapter: 9, chapter_title: 'Ray Optics', subject: 'Physics', class_name: 'Class 12', title: 'Ray Optics Handwritten', description: 'All ray diagrams, lens mirror formulas', price: 39, pages: 22, author_name: 'Anjali Singh' },
+  { chapter: 3, chapter_title: 'Electrochemistry', subject: 'Chemistry', class_name: 'Class 12', title: 'Electrochemistry Handwritten', description: 'Cells, Faraday laws, Nernst equation', price: 39, pages: 20, author_name: 'Rahul Verma' },
+  { chapter: 7, chapter_title: 'The p-Block Elements', subject: 'Chemistry', class_name: 'Class 12', title: 'p-Block Handwritten', description: 'All reactions, structures, properties', price: 39, pages: 24, author_name: 'Priya Sharma' },
+  { chapter: 9, chapter_title: 'Coordination Compounds', subject: 'Chemistry', class_name: 'Class 12', title: 'Coordination Compounds Handwritten', description: 'Structures, IUPAC names, isomerism', price: 39, pages: 20, author_name: 'Anjali Singh' },
+  { chapter: 6, chapter_title: 'Molecular Basis of Inheritance', subject: 'Biology', class_name: 'Class 12', title: 'DNA Replication Handwritten', description: 'DNA structure, replication diagrams', price: 39, pages: 22, author_name: 'Rahul Verma' },
+  { chapter: 5, chapter_title: 'Database and SQL', subject: 'Computer Science', class_name: 'Class 12', title: 'SQL Handwritten Notes', description: 'All SQL queries with examples', price: 29, pages: 16, author_name: 'Priya Sharma' },
+  { chapter: 7, chapter_title: 'Integrals', subject: 'Mathematics', class_name: 'Class 12', title: 'Integration Handwritten', description: 'All formulas and solved problems', price: 39, pages: 26, author_name: 'Anjali Singh' },
+  { chapter: 4, chapter_title: 'Determinants', subject: 'Mathematics', class_name: 'Class 12', title: 'Determinants Handwritten', description: 'Properties, cofactors, solved examples', price: 35, pages: 18, author_name: 'Rahul Verma' },
+];
+
+// ════════════════════════════════════════════════════════════
+// PYQ DATA
+// ════════════════════════════════════════════════════════════
+
+const allPYQ = [
+  { subject: 'Mathematics', class_name: 'Class 10', year: 2024, title: 'Class 10 Maths Board 2024', description: 'CBSE Board Exam March 2024 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Mathematics', class_name: 'Class 10', year: 2023, title: 'Class 10 Maths Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Mathematics', class_name: 'Class 10', year: 2022, title: 'Class 10 Maths Board 2022', description: 'CBSE Board Exam 2022 with complete solutions', price: 39, board: 'CBSE', solutions_included: true },
+  { subject: 'Mathematics', class_name: 'Class 10', year: 2020, title: 'Class 10 Maths Board 2020', description: 'CBSE Board Exam 2020 with complete solutions', price: 29, board: 'CBSE', solutions_included: true },
+  { subject: 'Science', class_name: 'Class 10', year: 2024, title: 'Class 10 Science Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Science', class_name: 'Class 10', year: 2023, title: 'Class 10 Science Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Science', class_name: 'Class 10', year: 2022, title: 'Class 10 Science Board 2022', description: 'CBSE Board Exam 2022 with complete solutions', price: 39, board: 'CBSE', solutions_included: true },
+  { subject: 'Social Science', class_name: 'Class 10', year: 2024, title: 'Class 10 SST Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Social Science', class_name: 'Class 10', year: 2023, title: 'Class 10 SST Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 39, board: 'CBSE', solutions_included: true },
+  { subject: 'English', class_name: 'Class 10', year: 2024, title: 'Class 10 English Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 39, board: 'CBSE', solutions_included: true },
+  { subject: 'English', class_name: 'Class 10', year: 2023, title: 'Class 10 English Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 39, board: 'CBSE', solutions_included: true },
+  { subject: 'Hindi', class_name: 'Class 10', year: 2024, title: 'Class 10 Hindi Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 39, board: 'CBSE', solutions_included: true },
+  { subject: 'Physics', class_name: 'Class 12', year: 2024, title: 'Class 12 Physics Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Physics', class_name: 'Class 12', year: 2023, title: 'Class 12 Physics Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Physics', class_name: 'Class 12', year: 2022, title: 'Class 12 Physics Board 2022', description: 'CBSE Board Exam 2022 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Chemistry', class_name: 'Class 12', year: 2024, title: 'Class 12 Chemistry Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Chemistry', class_name: 'Class 12', year: 2023, title: 'Class 12 Chemistry Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Mathematics', class_name: 'Class 12', year: 2024, title: 'Class 12 Maths Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Mathematics', class_name: 'Class 12', year: 2023, title: 'Class 12 Maths Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Mathematics', class_name: 'Class 12', year: 2022, title: 'Class 12 Maths Board 2022', description: 'CBSE Board Exam 2022 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Biology', class_name: 'Class 12', year: 2024, title: 'Class 12 Biology Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Biology', class_name: 'Class 12', year: 2023, title: 'Class 12 Biology Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Computer Science', class_name: 'Class 12', year: 2024, title: 'Class 12 CS Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Computer Science', class_name: 'Class 12', year: 2023, title: 'Class 12 CS Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Accountancy', class_name: 'Class 12', year: 2024, title: 'Class 12 Accountancy Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 59, board: 'CBSE', solutions_included: true },
+  { subject: 'Business Studies', class_name: 'Class 12', year: 2024, title: 'Class 12 BST Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Economics', class_name: 'Class 12', year: 2024, title: 'Class 12 Economics Board 2024', description: 'CBSE Board Exam 2024 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+  { subject: 'Economics', class_name: 'Class 12', year: 2023, title: 'Class 12 Economics Board 2023', description: 'CBSE Board Exam 2023 with complete solutions', price: 49, board: 'CBSE', solutions_included: true },
+];
+
+// ════════════════════════════════════════════════════════════
+// SEED FUNCTION
+// ════════════════════════════════════════════════════════════
+
+async function seedData() {
+  const adminExists = await db.users.findOne({ email: 'admin@studymart.com' });
+  if (!adminExists) {
+    const hash = await bcrypt.hash('admin123', 10);
+    await db.users.insert({ name: 'Admin', email: 'admin@studymart.com', password_hash: hash, role: 'admin', createdAt: new Date() });
+    console.log('✅ Admin user created');
+  }
+
+  const notesCount = await db.notes.count({});
+  if (notesCount === 0) {
+    const toInsert = allNotes.map(n => ({ ...n, is_free: false, downloads: 0, pdf_path: null, createdAt: new Date() }));
+    await db.notes.insert(toInsert);
+    console.log(`✅ ${toInsert.length} notes seeded`);
+  }
+
+  const hwCount = await db.handwritten.count({});
+  if (hwCount === 0) {
+    const toInsert = allHandwritten.map(n => ({ ...n, is_free: false, downloads: 0, pdf_path: null, createdAt: new Date() }));
+    await db.handwritten.insert(toInsert);
+    console.log(`✅ ${toInsert.length} handwritten notes seeded`);
+  }
+
+  const pyqCount = await db.pyq.count({});
+  if (pyqCount === 0) {
+    const toInsert = allPYQ.map(n => ({ ...n, is_free: false, downloads: 0, pdf_path: null, createdAt: new Date() }));
+    await db.pyq.insert(toInsert);
+    console.log(`✅ ${toInsert.length} PYQ papers seeded`);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTH ROUTES
+// ════════════════════════════════════════════════════════════
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, password, phone } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'All fields required' });
+    const existing = await db.users.findOne({ email });
+    if (existing) return res.status(400).json({ error: 'Email already registered' });
+    const hash = await bcrypt.hash(password, 10);
+    const user = await db.users.insert({ name, email, password_hash: hash, phone: phone || '', role: 'student', createdAt: new Date() });
+    const token = jwt.sign({ id: user._id, email, role: 'student' }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, name, email, role: 'student' } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await db.users.findOne({ email });
+    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(400).json({ error: 'Invalid credentials' });
+    const token = jwt.sign({ id: user._id, email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, name: user.name, email, role: user.role } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  const user = await db.users.findOne({ _id: req.user.id });
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  res.json({ id: user._id, name: user.name, email: user.email, role: user.role });
+});
+
+// ════════════════════════════════════════════════════════════
+// CONTENT ROUTES
+// ════════════════════════════════════════════════════════════
+
+app.get('/api/notes', optionalAuth, async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.class_id === '1') query.class_name = 'Class 10';
+    if (req.query.class_id === '2') query.class_name = 'Class 12';
+    if (req.query.subject_id) query.subject = req.query.subject_id;
+    const notes = await db.notes.find(query).sort({ class_name: 1, subject: 1, chapter: 1 });
+    if (req.user) {
+      const purchases = await db.purchases.find({ user_id: req.user.id, item_type: 'note' });
+      const ids = purchases.map(p => p.item_id);
+      notes.forEach(n => n.purchased = ids.includes(n._id));
+    }
+    res.json(notes.map(n => ({ ...n, id: n._id })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/handwritten', optionalAuth, async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.class_id === '1') query.class_name = 'Class 10';
+    if (req.query.class_id === '2') query.class_name = 'Class 12';
+    if (req.query.subject_id) query.subject = req.query.subject_id;
+    const notes = await db.handwritten.find(query).sort({ class_name: 1, subject: 1, chapter: 1 });
+    if (req.user) {
+      const purchases = await db.purchases.find({ user_id: req.user.id, item_type: 'handwritten' });
+      const ids = purchases.map(p => p.item_id);
+      notes.forEach(n => n.purchased = ids.includes(n._id));
+    }
+    res.json(notes.map(n => ({ ...n, id: n._id })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/pyq', optionalAuth, async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.class_id === '1') query.class_name = 'Class 10';
+    if (req.query.class_id === '2') query.class_name = 'Class 12';
+    if (req.query.subject_id) query.subject = req.query.subject_id;
+    const papers = await db.pyq.find(query).sort({ year: -1 });
+    if (req.user) {
+      const purchases = await db.purchases.find({ user_id: req.user.id, item_type: 'pyq' });
+      const ids = purchases.map(p => p.item_id);
+      papers.forEach(p => p.purchased = ids.includes(p._id));
+    }
+    res.json(papers.map(p => ({ ...p, id: p._id })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/classes', (req, res) => {
+  res.json([{ id: 1, name: 'Class 10' }, { id: 2, name: 'Class 12' }]);
+});
+
+app.get('/api/classes/:id/subjects', async (req, res) => {
+  const className = req.params.id === '1' ? 'Class 10' : 'Class 12';
+  const notes = await db.notes.find({ class_name: className });
+  const subjects = [...new Set(notes.map(n => n.subject))].map(s => ({ id: s, name: s }));
+  res.json(subjects);
+});
+
+app.get('/api/search', async (req, res) => {
+  try {
+    const q = req.query.q?.toLowerCase() || '';
+    const allN = await db.notes.find({});
+    const allH = await db.handwritten.find({});
+    const allP = await db.pyq.find({});
+    const match = i => i.title?.toLowerCase().includes(q) || i.subject?.toLowerCase().includes(q) || i.chapter_title?.toLowerCase().includes(q);
+    res.json({
+      notes: allN.filter(match).slice(0, 5).map(n => ({ ...n, id: n._id, type: 'note' })),
+      handwritten: allH.filter(match).slice(0, 5).map(n => ({ ...n, id: n._id, type: 'handwritten' })),
+      pyq: allP.filter(match).slice(0, 5).map(n => ({ ...n, id: n._id, type: 'pyq' })),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════
+// CART
+// ════════════════════════════════════════════════════════════
+
+app.get('/api/cart', authMiddleware, async (req, res) => {
+  try {
+    const items = await db.cart.find({ user_id: req.user.id });
+    const enriched = await Promise.all(items.map(async item => {
+      let detail = null;
+      if (item.item_type === 'note') detail = await db.notes.findOne({ _id: item.item_id });
+      else if (item.item_type === 'handwritten') detail = await db.handwritten.findOne({ _id: item.item_id });
+      else if (item.item_type === 'pyq') detail = await db.pyq.findOne({ _id: item.item_id });
+      if (detail) detail = { ...detail, id: detail._id };
+      return { ...item, detail };
+    }));
+    res.json(enriched.filter(i => i.detail));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cart', authMiddleware, async (req, res) => {
+  try {
+    const { item_type, item_id } = req.body;
+    const existing = await db.cart.findOne({ user_id: req.user.id, item_type, item_id });
+    if (!existing) await db.cart.insert({ user_id: req.user.id, item_type, item_id, added_at: new Date() });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cart/:type/:id', authMiddleware, async (req, res) => {
+  await db.cart.remove({ user_id: req.user.id, item_type: req.params.type, item_id: req.params.id }, {});
+  res.json({ success: true });
+});
+
+// ════════════════════════════════════════════════════════════
+// ORDERS
+// ════════════════════════════════════════════════════════════
+
+app.post('/api/orders/create', authMiddleware, async (req, res) => {
+  try {
+    const cartItems = await db.cart.find({ user_id: req.user.id });
+    if (!cartItems.length) return res.status(400).json({ error: 'Cart is empty' });
+    let total = 0;
+    for (const item of cartItems) {
+      let doc = null;
+      if (item.item_type === 'note') doc = await db.notes.findOne({ _id: item.item_id });
+      else if (item.item_type === 'handwritten') doc = await db.handwritten.findOne({ _id: item.item_id });
+      else if (item.item_type === 'pyq') doc = await db.pyq.findOne({ _id: item.item_id });
+      if (doc) total += doc.price;
+    }
+    const order = await db.orders.insert({ user_id: req.user.id, items: cartItems, total_amount: total, status: 'pending', createdAt: new Date() });
+    res.json({ db_order_id: order._id, amount: total * 100, currency: 'INR', key_id: 'rzp_test_demo', order_id: 'demo_' + Date.now() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/orders/verify', authMiddleware, async (req, res) => {
+  try {
+    const { db_order_id } = req.body;
+    const order = await db.orders.findOne({ _id: db_order_id });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    await db.orders.update({ _id: db_order_id }, { $set: { status: 'paid' } });
+    for (const item of order.items) {
+      await db.purchases.insert({ user_id: req.user.id, item_type: item.item_type, item_id: item.item_id, order_id: db_order_id, purchased_at: new Date() });
+    }
+    await db.cart.remove({ user_id: req.user.id }, { multi: true });
+    res.json({ success: true, message: 'Payment successful! Notes unlocked.' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/purchases', authMiddleware, async (req, res) => {
+  const purchases = await db.purchases.find({ user_id: req.user.id });
+  res.json(purchases);
+});
+
+// ════════════════════════════════════════════════════════════
+// ADMIN
+// ════════════════════════════════════════════════════════════
+
+app.get('/api/admin/stats', adminMiddleware, async (req, res) => {
+  const total_users = await db.users.count({ role: 'student' });
+  const total_notes = await db.notes.count({});
+  const total_handwritten = await db.handwritten.count({});
+  const total_pyq = await db.pyq.count({});
+  const orders = await db.orders.find({ status: 'paid' });
+  const total_revenue = orders.reduce((s, o) => s + o.total_amount, 0);
+  res.json({ total_users, total_notes, total_handwritten, total_pyq, total_orders: orders.length, total_revenue, recent_orders: orders.slice(-10).reverse() });
+});
+
+app.get('/api/admin/notes', adminMiddleware, async (req, res) => {
+  const notes = await db.notes.find({});
+  res.json(notes.map(n => ({ ...n, id: n._id })));
+});
+
+app.post('/api/admin/notes', adminMiddleware, upload.single('pdf'), async (req, res) => {
+  try {
+    const { title, description, price, pages, subject, class_name, chapter, chapter_title } = req.body;
+    const pdf_path = req.file ? '/uploads/' + req.file.filename : null;
+    const note = await db.notes.insert({ title, description, price: parseFloat(price), pages: parseInt(pages) || 0, subject, class_name, chapter: parseInt(chapter) || 0, chapter_title, pdf_path, is_free: false, downloads: 0, createdAt: new Date() });
+    res.json({ id: note._id, success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/notes/:id', adminMiddleware, async (req, res) => {
+  await db.notes.remove({ _id: req.params.id }, {});
+  res.json({ success: true });
+});
+
+app.post('/api/admin/handwritten', adminMiddleware, upload.single('pdf'), async (req, res) => {
+  try {
+    const { title, description, price, pages, subject, class_name, chapter, chapter_title, author_name } = req.body;
+    const pdf_path = req.file ? '/uploads/' + req.file.filename : null;
+    const note = await db.handwritten.insert({ title, description, price: parseFloat(price), pages: parseInt(pages) || 0, subject, class_name, chapter: parseInt(chapter) || 0, chapter_title, author_name, pdf_path, is_free: false, downloads: 0, createdAt: new Date() });
+    res.json({ id: note._id, success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/handwritten/:id', adminMiddleware, async (req, res) => {
+  await db.handwritten.remove({ _id: req.params.id }, {});
+  res.json({ success: true });
+});
+
+app.post('/api/admin/pyq', adminMiddleware, upload.single('pdf'), async (req, res) => {
+  try {
+    const { title, description, price, subject, class_name, year, board, solutions_included } = req.body;
+    const pdf_path = req.file ? '/uploads/' + req.file.filename : null;
+    const paper = await db.pyq.insert({ title, description, price: parseFloat(price), subject, class_name, year: parseInt(year), board, solutions_included: solutions_included === 'true', pdf_path, is_free: false, downloads: 0, createdAt: new Date() });
+    res.json({ id: paper._id, success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/pyq/:id', adminMiddleware, async (req, res) => {
+  await db.pyq.remove({ _id: req.params.id }, {});
+  res.json({ success: true });
+});
+
+app.get('/api/admin/users', adminMiddleware, async (req, res) => {
+  const users = await db.users.find({});
+  res.json(users.map(u => ({ id: u._id, name: u.name, email: u.email, role: u.role, phone: u.phone, created_at: u.createdAt })));
+});
+
+// ════════════════════════════════════════════════════════════
+// START
+// ════════════════════════════════════════════════════════════
+
+seedData().then(() => {
+  app.listen(PORT, () => {
+    console.log('\n🚀 StudyMart Backend running on http://localhost:5000');
+    console.log('🔑 Admin login: admin@studymart.com / admin123');
+    console.log('📦 Database saved in /database folder\n');
+  });
+});

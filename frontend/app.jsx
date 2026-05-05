@@ -4,7 +4,7 @@
 
 const { useState, useEffect, useContext, createContext, useCallback } = React;
 
-const API = 'http://localhost:5000/api';
+const API = 'https://studymart-production.up.railway.app/api';
 
 // ── Auth Context ─────────────────────────────────────────────
 const AuthCtx = createContext(null);
